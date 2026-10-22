@@ -1,0 +1,98 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # google-services.json না থাকলে বিল্ড চলবে না (ব্যর্থও হবে না, শুধু বাদ যাবে)।
+      - name: google-services.json আছে কি না দেখা
+        id: chk
+        run: |
+          if [ -f app/google-services.json ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::app/google-services.json পাওয়া যায়নি, তাই বিল্ড চালানো হয়নি।"
+          fi
+
+      - name: Java 17
+        if: steps.chk.outputs.ok == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle
+        if: steps.chk.outputs.ok == 'true'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: সাইন করার চাবি তৈরি
+        if: steps.chk.outputs.ok == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "KEYSTORE_BASE64 secret সেট করা নেই" | tee build.log
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: APK বিল্ড
+        if: steps.chk.outputs.ok == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace assembleRelease 2>&1 | tee build.log
+
+      - name: Releases-এ প্রকাশ
+        if: steps.chk.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v1.0.${{ github.run_number }}"
+          cp app/build/outputs/apk/release/app-release.apk RickshawRide.apk
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" RickshawRide.apk \
+            --title "চলো $TAG" \
+            --notes "স্বয়ংক্রিয় বিল্ড নম্বর ${{ github.run_number }} (commit ${GITHUB_SHA::7})" \
+            --latest
+
+      # বিল্ড ফেল করলে লগ আলাদা ব্রাঞ্চে (build-logs) জমা হয়, যেন আপনি আমাকে দেখাতে পারেন।
+      - name: ত্রুটির লগ সেভ
+        if: failure() && steps.chk.outputs.ok == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          if [ -f build.log ]; then
+            tail -n 600 build.log > "$RUNNER_TEMP/logs/build-error.txt"
+          else
+            echo "build.log তৈরি হয়নি; ধাপ ব্যর্থ হয়েছে বিল্ডের আগে।" > "$RUNNER_TEMP/logs/build-error.txt"
+          fi
+          echo "run: ${{ github.run_number }}  commit: ${GITHUB_SHA}" >> "$RUNNER_TEMP/logs/build-error.txt"
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git checkout --orphan build-logs
+          git rm -rf . > /dev/null 2>&1 || true
+          cp "$RUNNER_TEMP/logs/build-error.txt" build-error.txt
+          git add build-error.txt
+          git commit -m "Build error log (run ${{ github.run_number }})"
+          git push --force origin build-logs

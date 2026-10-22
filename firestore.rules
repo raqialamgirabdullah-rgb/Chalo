@@ -1,0 +1,138 @@
+rules_version = '2';
+
+// চলো — Firestore Security Rules
+// Firebase Console → Firestore Database → Rules ট্যাবে সব মুছে এটি পেস্ট করে Publish করুন।
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validVehicle(v) {
+      return v in ['rickshaw', 'auto_rickshaw', 'bicycle', 'van', 'auto_van'];
+    }
+
+    // সাইন-ইন করা ব্যবহারকারী কি নিবন্ধিত চালক?
+    function isDriver() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver';
+    }
+
+    // ---------- ব্যবহারকারী: শুধু নিজের তথ্য পড়া ও লেখা ----------
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'phone', 'role', 'vehicleType', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 20
+        && request.resource.data.role in ['passenger', 'driver']
+        && (request.resource.data.role == 'passenger'
+            || ('vehicleType' in request.resource.data && validVehicle(request.resource.data.vehicleType)));
+
+      allow delete: if false;
+    }
+
+    // ---------- চালকের অনলাইন অবস্থা ও অবস্থান ----------
+    // পড়া: সাইন-ইন করা যে কেউ (যাত্রী চালকের অবস্থান দেখে)। লেখা: শুধু ওই চালক নিজে।
+    match /drivers/{uid} {
+      allow read: if signedIn();
+
+      allow create, update: if signedIn() && request.auth.uid == uid && isDriver()
+        && request.resource.data.keys().hasOnly(['online', 'lat', 'lng', 'vehicleType', 'updatedAt'])
+        && (!('vehicleType' in request.resource.data) || validVehicle(request.resource.data.vehicleType))
+        && (!('lat' in request.resource.data) || request.resource.data.lat is number)
+        && (!('lng' in request.resource.data) || request.resource.data.lng is number);
+
+      allow delete: if false;
+    }
+
+    // ---------- রাইড ----------
+    match /rides/{rideId} {
+
+      // পড়া: ওই রাইডের যাত্রী, ওই রাইডের চালক, অথবা (নতুন "requested" রাইড) যেকোনো চালক।
+      allow read: if signedIn() && (
+        resource.data.passengerId == request.auth.uid
+        || resource.data.driverId == request.auth.uid
+        || (resource.data.status == 'requested' && isDriver())
+      );
+
+      // তৈরি: শুধু যাত্রী নিজের নামে, "requested" অবস্থায়, চালক ছাড়া।
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+             'status', 'passengerId', 'passengerName', 'driverId', 'vehicleType',
+             'pickupLat', 'pickupLng', 'destLat', 'destLng', 'distanceKm', 'fare', 'createdAt'])
+        && request.resource.data.passengerId == request.auth.uid
+        && request.resource.data.status == 'requested'
+        && request.resource.data.driverId == null
+        && validVehicle(request.resource.data.vehicleType)
+        && request.resource.data.fare is int
+        && request.resource.data.fare >= 0
+        && request.resource.data.fare <= 100000
+        && request.resource.data.distanceKm is number
+        && request.resource.data.pickupLat is number
+        && request.resource.data.pickupLng is number
+        && request.resource.data.destLat is number
+        && request.resource.data.destLng is number
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if signedIn() && (
+
+        // ১) চালক গ্রহণ করছে: শুধু "requested" অবস্থার রাইড, এবং চালক নিজের নামে।
+        (resource.data.status == 'requested'
+          && isDriver()
+          && request.resource.data.status == 'accepted'
+          && request.resource.data.driverId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'driverId', 'driverName', 'driverVehicle', 'acceptedAt']))
+
+        // ২) গৃহীত রাইডের চালক ধাপ এগোচ্ছে বা বাতিল করছে।
+        || (resource.data.driverId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'arrivedAt', 'startedAt', 'completedAt', 'cancelledAt', 'cancelledBy'])
+          && ((resource.data.status == 'accepted' && request.resource.data.status in ['arrived', 'cancelled'])
+              || (resource.data.status == 'arrived' && request.resource.data.status in ['ongoing', 'cancelled'])
+              || (resource.data.status == 'ongoing' && request.resource.data.status == 'completed')))
+
+        // ৩) যাত্রী নিজের রাইড বাতিল করছে।
+        || (resource.data.passengerId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'cancelledAt', 'cancelledBy'])
+          && resource.data.status in ['requested', 'accepted', 'arrived', 'ongoing']
+          && request.resource.data.status == 'cancelled')
+      );
+
+      allow delete: if false;
+
+      // ---------- ফোন নম্বর: রাইডের দুই পক্ষই শুধু দেখতে পায় ----------
+      // যাত্রীর নম্বর চালক পাবে রাইড গৃহীত হওয়ার পর (তখনই রাইডে driverId বসে)।
+      match /contacts/{who} {
+        function rideNow() {
+          return get(/databases/$(database)/documents/rides/$(rideId)).data;
+        }
+        function rideAfter() {
+          return getAfter(/databases/$(database)/documents/rides/$(rideId)).data;
+        }
+
+        allow read: if signedIn()
+          && (rideNow().passengerId == request.auth.uid || rideNow().driverId == request.auth.uid);
+
+        allow create: if signedIn()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'phone'])
+          && (
+            (who == 'passenger' && rideAfter().passengerId == request.auth.uid)
+            || (who == 'driver' && rideAfter().driverId == request.auth.uid && rideAfter().status == 'accepted')
+          );
+
+        allow update, delete: if false;
+      }
+    }
+  }
+}
