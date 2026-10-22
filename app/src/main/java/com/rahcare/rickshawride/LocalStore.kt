@@ -19,7 +19,7 @@ object AppConfig {
      * true হলে সব তথ্য শুধু এই ফোনেই জমা থাকে (Firebase ছাড়া পরীক্ষার মোড)।
      * Firebase-এ ফিরতে চাইলে এটি false করুন (আর কোড বদলাতে হবে না)।
      */
-    val LOCAL_MODE: Boolean = true
+    val LOCAL_MODE: Boolean = false
 }
 
 /**

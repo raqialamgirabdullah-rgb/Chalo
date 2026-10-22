@@ -21,7 +21,14 @@
 | `firestore.rules` | Firestore নিরাপত্তা নিয়ম (ওয়েবসাইটের Rules-এর ভেতরে যোগ করার অংশ) |
 | `.github/workflows/build.yml` | স্বয়ংক্রিয় APK বিল্ড ও Releases-এ প্রকাশ |
 
-## বর্তমান অবস্থা: পরীক্ষামূলক মোড (Firebase ছাড়া)
+## বর্তমান অবস্থা: Firebase সংযুক্ত (প্রজেক্ট `chalo-8483a`)
+
+`AppConfig.LOCAL_MODE = false`, তাই সব তথ্য Firestore-এ যায় এবং দুই আলাদা ফোনের মধ্যে রাইড চলে।
+চালানোর আগে Firebase Console-এ দুটি কাজ লাগবে: **Authentication → Sign-in method → Anonymous চালু** এবং
+**Firestore Database তৈরি করে Rules ট্যাবে `firestore-full.rules` পেস্ট করে Publish।**
+পরীক্ষামূলক মোডে (Firebase ছাড়া, এক ফোনে) ফিরতে `LOCAL_MODE = true` করুন।
+
+## পরীক্ষামূলক মোড (Firebase ছাড়া) — পুরোনো বিবরণ
 
 `AppConfig.LOCAL_MODE = true` (`LocalStore.kt`) থাকলে সব তথ্য শুধু **এই ফোনের ভেতরে** জমা থাকে। ইন্টারনেট, Firebase বা Rules কিছুই লাগে না। উদ্দেশ্য: আগে দেখা অ্যাপের পর্দা, মানচিত্র, ভাড়া ও ধাপগুলো ঠিকমতো চলছে কি না।
 

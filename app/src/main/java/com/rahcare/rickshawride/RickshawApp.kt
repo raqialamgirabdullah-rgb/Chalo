@@ -7,16 +7,16 @@ import org.osmdroid.config.Configuration
 import java.io.File
 
 /**
- * Firebase প্রজেক্টের তথ্য — এখানে RahCare ওয়েবসাইটের একই প্রজেক্ট (rah-care) ব্যবহার হচ্ছে।
- * অন্য প্রজেক্টে সরাতে চাইলে শুধু নিচের পাঁচটি মান বদলালেই হবে (আর কিছু নয়)।
- * এগুলো ওয়েবসাইটের common.js-এ খোলাই আছে, গোপন পাসওয়ার্ড নয়।
+ * Firebase প্রজেক্টের তথ্য — চলো-র নিজস্ব আলাদা প্রজেক্ট (chalo-8483a), RahCare ওয়েবসাইটের সাথে কিছু মেশে না।
+ * এগুলো google-services.json-এর মান; অ্যাপের কোডে এগুলো খোলা থাকাই নিয়ম, গোপন পাসওয়ার্ড নয়।
+ * তবু Google Cloud Console-এ এই API key শুধু এই প্যাকেজের জন্য সীমিত করে রাখা ভালো।
  */
 object FirebaseConfig {
-    const val API_KEY = "AIzaSyDAicuq_q2KoKLx01Yejo3jEx64n5tZOJA"
-    const val APP_ID = "1:205338868264:web:c5cb43f269346374c2531d"
-    const val PROJECT_ID = "rah-care"
-    const val STORAGE_BUCKET = "rah-care.firebasestorage.app"
-    const val SENDER_ID = "205338868264"
+    const val API_KEY = "AIzaSyCXoKc0N0gZuUBkMUBv8TmC1d-of1WigaI"
+    const val APP_ID = "1:166813770190:android:983202fcd1b2e23bdc4b9f"
+    const val PROJECT_ID = "chalo-8483a"
+    const val STORAGE_BUCKET = "chalo-8483a.firebasestorage.app"
+    const val SENDER_ID = "166813770190"
 }
 
 class RickshawApp : Application() {
