@@ -307,29 +307,34 @@ fun PassengerBooking(vm: AppViewModel) {
             if (vm.step == BookStep.PICKUP) CenterPin(Green)
             if (vm.step == BookStep.DEST) CenterPin(Red)
         }
-        Panel(maxHeight = 400.dp) {
+        Panel(maxHeight = 460.dp) {
             when (vm.step) {
                 BookStep.PICKUP -> {
                     Title("কোথা থেকে উঠবেন?")
+                    MyLocationCard(vm)
+                    PlaceSearchField("কোথা থেকে উঠবেন (লিখে খুঁজুন)", vm.pickupText, { vm.pickupText = it }, vm)
                     Body(
-                        if (!permOk) "অবস্থানের অনুমতি দেওয়া নেই। অনুমতি দিন, অথবা মানচিত্র সরিয়ে সবুজ পিন ঠিক জায়গায় আনুন।"
-                        else if (vm.myLoc == null) "আপনার অবস্থান খোঁজা হচ্ছে... মানচিত্র সরিয়ে সবুজ পিন ঠিক জায়গায় আনতে পারেন।"
-                        else "সবুজ পিনটি আপনার অবস্থান। ঠিক না হলে মানচিত্র সরিয়ে পিন ঠিক করুন।",
+                        if (!permOk) "অবস্থানের অনুমতি দেওয়া নেই। অনুমতি দিন, অথবা জায়গার নাম লিখুন, অথবা মানচিত্র সরিয়ে সবুজ পিন ঠিক জায়গায় আনুন।"
+                        else "আপনার অবস্থান থেকে উঠলে নিচের বাটন চাপুন। অন্য জায়গা হলে নাম লিখে খুঁজুন, অথবা মানচিত্র সরিয়ে সবুজ পিন ঠিক করুন।",
                     )
                     if (!permOk) BigButton("অনুমতি দিন", { askPermission() }, secondary = true)
-                    vm.myLoc?.let { loc ->
-                        BigButton("আমার অবস্থানে ফিরুন", { vm.focusOn(loc, 17.0) }, secondary = true)
+                    vm.myLoc?.let {
+                        BigButton("আমার অবস্থান থেকেই উঠব", { vm.useMyLocationAsPickup() }, secondary = true)
                     }
                     BigButton("পিকআপ ঠিক আছে", { vm.confirmPickup(holder.center() ?: DEFAULT_CENTER) })
                 }
                 BookStep.DEST -> {
                     Title("কোথায় যাবেন?")
-                    Body("মানচিত্রে গন্তব্যে ট্যাপ করুন অথবা মানচিত্র সরিয়ে লাল পিনটি গন্তব্যে আনুন।")
+                    Body("উঠবেন: ${vm.pickupText.ifBlank { "মানচিত্রে বাছা জায়গা" }}", color = Color(0xFF1B7F4B))
+                    PlaceSearchField("কোথায় নামবেন (লিখে খুঁজুন)", vm.destText, { vm.destText = it }, vm)
+                    Body("অথবা মানচিত্রে গন্তব্যে ট্যাপ করুন, কিংবা মানচিত্র সরিয়ে লাল পিনটি গন্তব্যে আনুন।")
                     BigButton("গন্তব্য ঠিক আছে", { vm.confirmDest(holder.center() ?: DEFAULT_CENTER) })
                     BigButton("পেছনে", { vm.backStep() }, secondary = true)
                 }
                 BookStep.VEHICLE -> {
                     Title("গাড়ি বাছুন")
+                    Body("উঠবেন: ${vm.pickupText.ifBlank { "মানচিত্রে বাছা জায়গা" }}", color = Color(0xFF1B7F4B))
+                    Body("নামবেন: ${vm.destText.ifBlank { "মানচিত্রে বাছা জায়গা" }}", color = Color(0xFFC62828))
                     Body("দূরত্ব (আনুমানিক): ${vm.distanceKm.kmText()} কিমি")
                     for (v in VehicleType.values()) {
                         val sel = vm.vehicle == v

@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -130,6 +131,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var myLoc by mutableStateOf<Pt?>(null)
         private set
+    // জায়গা লিখে খোঁজা: উঠার জায়গা, নামার জায়গা ও আমার বর্তমান অবস্থানের ঠিকানা
+    var pickupText by mutableStateOf("")
+    var destText by mutableStateOf("")
+    var myAddress by mutableStateOf<String?>(null)
+        private set
+    var suggestions by mutableStateOf<List<Place>>(emptyList())
+        private set
+    var searching by mutableStateOf(false)
+        private set
+    var searchMsg by mutableStateOf<String?>(null)
+        private set
+    private var pickupTextPt: Pt? = null
+    private var destTextPt: Pt? = null
+    private var searchJob: Job? = null
+    private var addrFor: Pt? = null
     var focus by mutableStateOf<Focus?>(null)
         private set
     private var focusSeq = 0
@@ -246,12 +262,72 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setMyLocation(pt: Pt, recenter: Boolean) {
         myLoc = pt
+        val last = addrFor
+        if (last == null || Geo.straightKm(last, pt) > 0.1) {
+            addrFor = pt
+            viewModelScope.launch { Places.reverse(pt)?.let { myAddress = it } }
+        }
         if (recenter) focusOn(pt, 17.0)
+    }
+
+    // ---------- জায়গা লিখে খোঁজা ----------
+    fun search(q: String) {
+        val text = q.trim()
+        if (text.length < 2) {
+            searchMsg = "অন্তত দুটি অক্ষর লিখুন।"
+            return
+        }
+        searchJob?.cancel()
+        searching = true
+        searchMsg = null
+        suggestions = emptyList()
+        searchJob = viewModelScope.launch {
+            try {
+                val res = Places.search(text, myLoc ?: pickup)
+                suggestions = res
+                if (res.isEmpty()) searchMsg = "কিছু পাওয়া যায়নি। অন্যভাবে লিখুন, অথবা মানচিত্র সরিয়ে পিন বসান।"
+            } catch (e: Exception) {
+                searchMsg = "খোঁজা যায়নি — ইন্টারনেট দেখে আবার চেষ্টা করুন।"
+            } finally {
+                searching = false
+            }
+        }
+    }
+
+    fun pickPlace(p: Place) {
+        suggestions = emptyList()
+        searchMsg = null
+        focusOn(p.pt, 17.0)
+        if (step == BookStep.DEST) { destText = p.name; destTextPt = p.pt }
+        else { pickupText = p.name; pickupTextPt = p.pt }
+    }
+
+    fun useMyLocationAsPickup() {
+        val l = myLoc ?: return
+        suggestions = emptyList()
+        searchMsg = null
+        focusOn(l, 17.0)
+        pickupText = myAddress ?: "আমার বর্তমান অবস্থান"
+        pickupTextPt = l
+    }
+
+    fun clearSearch() {
+        suggestions = emptyList()
+        searchMsg = null
+    }
+
+    // লেখা জায়গা আর পিনের জায়গা না মিললে পিনের ঠিকানা এনে লেখাটা ঠিক করি
+    private fun syncText(center: Pt, textPt: Pt?, current: String, set: (String, Pt) -> Unit) {
+        if (current.isNotBlank() && textPt != null && Geo.straightKm(textPt, center) < 0.05) return
+        set("মানচিত্রে বাছা জায়গা", center)
+        viewModelScope.launch { Places.reverse(center)?.let { set(it, center) } }
     }
 
     // ---------- যাত্রী: বুকিংয়ের ধাপ ----------
     fun confirmPickup(center: Pt) {
         pickup = center
+        syncText(center, pickupTextPt, pickupText) { t, p -> pickupText = t; pickupTextPt = p }
+        clearSearch()
         step = BookStep.DEST
     }
 
@@ -264,6 +340,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             dest = center
+            syncText(center, destTextPt, destText) { t, p -> destText = t; destTextPt = p }
+            clearSearch()
             distanceKm = km
             step = BookStep.VEHICLE
         }
@@ -287,6 +365,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         step = BookStep.PICKUP
         pickup = null
         dest = null
+        pickupText = ""
+        destText = ""
+        pickupTextPt = null
+        destTextPt = null
+        clearSearch()
         vehicle = null
         distanceKm = 0.0
         myLoc?.let { focusOn(it, 17.0) }
