@@ -16,8 +16,98 @@ object Repo {
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
     private val db: FirebaseFirestore get() = FirebaseFirestore.getInstance()
 
+
+    // =====================================================================
+    // সামনের দরজা: AppConfig.LOCAL_MODE অনুযায়ী এই ফোনের স্টোর অথবা Firestore ব্যবহার হয়।
+    // =====================================================================
+
+    fun currentUid(): String? =
+        if (AppConfig.LOCAL_MODE) LocalStore.uid() else auth.currentUser?.uid
+
+    suspend fun ensureSignedIn(): String =
+        if (AppConfig.LOCAL_MODE) LocalStore.uid() else fsEnsureSignedIn()
+
+    suspend fun loadProfile(uid: String): Profile? =
+        if (AppConfig.LOCAL_MODE) LocalStore.loadProfile() else fsLoadProfile(uid)
+
+    suspend fun saveProfile(uid: String, p: Profile) {
+        if (AppConfig.LOCAL_MODE) LocalStore.saveProfile(p) else fsSaveProfile(uid, p)
+    }
+
+    suspend fun createRide(
+        uid: String,
+        p: Profile,
+        v: VehicleType,
+        pickup: Pt,
+        dest: Pt,
+        km: Double,
+        fare: Int,
+    ): String =
+        if (AppConfig.LOCAL_MODE) LocalStore.createRide(uid, p, v, pickup, dest, km, fare)
+        else fsCreateRide(uid, p, v, pickup, dest, km, fare)
+
+    suspend fun acceptRide(rideId: String, uid: String, p: Profile): Boolean =
+        if (AppConfig.LOCAL_MODE) LocalStore.acceptRide(rideId, uid, p) else fsAcceptRide(rideId, uid, p)
+
+    suspend fun setRideStatus(rideId: String, status: String) {
+        if (AppConfig.LOCAL_MODE) LocalStore.setRideStatus(rideId, status) else fsSetRideStatus(rideId, status)
+    }
+
+    suspend fun cancelRide(rideId: String, by: String, onlyIfRequested: Boolean = false): Boolean =
+        if (AppConfig.LOCAL_MODE) LocalStore.cancelRide(rideId, by, onlyIfRequested)
+        else fsCancelRide(rideId, by, onlyIfRequested)
+
+    fun observeMyRides(field: String, uid: String): Flow<List<Ride>> =
+        if (AppConfig.LOCAL_MODE) LocalStore.observeMyRides(field, uid) else fsObserveMyRides(field, uid)
+
+    fun observeRequested(vehicleKey: String): Flow<List<Ride>> =
+        if (AppConfig.LOCAL_MODE) LocalStore.observeRequested(vehicleKey) else fsObserveRequested(vehicleKey)
+
+    fun observeContact(rideId: String, who: String): Flow<Contact?> =
+        if (AppConfig.LOCAL_MODE) LocalStore.observeContact(rideId, who) else fsObserveContact(rideId, who)
+
+    fun observeDriverLoc(driverId: String): Flow<Pt?> =
+        if (AppConfig.LOCAL_MODE) LocalStore.observeDriverLoc(driverId) else fsObserveDriverLoc(driverId)
+
+    suspend fun setDriverOffline(uid: String) {
+        if (AppConfig.LOCAL_MODE) LocalStore.removeDriverLoc(uid) else fsSetDriverOffline(uid)
+    }
+
+    /** চালকের নতুন অবস্থান পাঠানো (অপেক্ষা না করে)। */
+    fun writeDriverLocation(uid: String, pt: Pt, vehicle: String) {
+        if (AppConfig.LOCAL_MODE) {
+            LocalStore.setDriverLoc(uid, pt)
+            return
+        }
+        val data = hashMapOf<String, Any>(
+            "online" to true,
+            "lat" to pt.lat,
+            "lng" to pt.lng,
+            "vehicleType" to vehicle,
+            "updatedAt" to FieldValue.serverTimestamp(),
+        )
+        db.collection("chalo_drivers").document(uid).set(data, SetOptions.merge())
+    }
+
+    /** সার্ভিস বন্ধ হওয়ার সময় চালককে অফলাইন চিহ্নিত করা (অপেক্ষা না করে)। */
+    fun writeDriverOfflineQuiet(uid: String) {
+        if (AppConfig.LOCAL_MODE) {
+            LocalStore.removeDriverLoc(uid)
+            return
+        }
+        db.collection("chalo_drivers").document(uid).set(
+            mapOf("online" to false, "updatedAt" to FieldValue.serverTimestamp()),
+            SetOptions.merge(),
+        )
+    }
+
+    /** শুধু পরীক্ষার মোডে: চালকের জন্য নকল যাত্রীর রিকোয়েস্ট। */
+    fun createDemoRequest(near: Pt, vehicleKey: String) {
+        if (AppConfig.LOCAL_MODE) LocalStore.createDemoRequest(near, vehicleKey)
+    }
+
     // ---------- লগইন ----------
-    suspend fun ensureSignedIn(): String {
+    private suspend fun fsEnsureSignedIn(): String {
         val current = auth.currentUser
         if (current != null) return current.uid
         val res = auth.signInAnonymously().await()
@@ -25,7 +115,7 @@ object Repo {
     }
 
     // ---------- প্রোফাইল ----------
-    suspend fun loadProfile(uid: String): Profile? {
+    private suspend fun fsLoadProfile(uid: String): Profile? {
         val s = db.collection("chalo_users").document(uid).get().await()
         if (!s.exists()) return null
         return Profile(
@@ -36,7 +126,7 @@ object Repo {
         )
     }
 
-    suspend fun saveProfile(uid: String, p: Profile) {
+    private suspend fun fsSaveProfile(uid: String, p: Profile) {
         val data = hashMapOf<String, Any>(
             "name" to p.name,
             "phone" to p.phone,
@@ -48,7 +138,7 @@ object Repo {
     }
 
     // ---------- রাইড ডাকা ----------
-    suspend fun createRide(
+    private suspend fun fsCreateRide(
         uid: String,
         p: Profile,
         v: VehicleType,
@@ -87,7 +177,7 @@ object Repo {
      * চালক রাইড গ্রহণ করে। Firestore transaction ব্যবহার হয়েছে,
      * তাই একসাথে কয়েকজন চাপলেও শুধু একজন পায়। সফল হলে true।
      */
-    suspend fun acceptRide(rideId: String, uid: String, p: Profile): Boolean {
+    private suspend fun fsAcceptRide(rideId: String, uid: String, p: Profile): Boolean {
         val ref = db.collection("chalo_rides").document(rideId)
         val driverContact = ref.collection("contacts").document("driver")
         return try {
@@ -119,7 +209,7 @@ object Repo {
     }
 
     /** চালকের ধাপ: arrived → ongoing → completed */
-    suspend fun setRideStatus(rideId: String, status: String) {
+    private suspend fun fsSetRideStatus(rideId: String, status: String) {
         val field = when (status) {
             RideStatus.ARRIVED -> "arrivedAt"
             RideStatus.ONGOING -> "startedAt"
@@ -135,7 +225,7 @@ object Repo {
      * বাতিল। onlyIfRequested = true হলে শুধু তখনই বাতিল হয় যখন কেউ এখনো নেয়নি
      * (৩ মিনিটের স্বয়ংক্রিয় বাতিলে এটা দরকার)।
      */
-    suspend fun cancelRide(rideId: String, by: String, onlyIfRequested: Boolean = false): Boolean {
+    private suspend fun fsCancelRide(rideId: String, by: String, onlyIfRequested: Boolean = false): Boolean {
         val ref = db.collection("chalo_rides").document(rideId)
         return try {
             val done = db.runTransaction(Transaction.Function<Boolean> { tx ->
@@ -164,7 +254,7 @@ object Repo {
     }
 
     // ---------- লাইভ শোনা ----------
-    fun observeMyRides(field: String, uid: String): Flow<List<Ride>> = callbackFlow {
+    private fun fsObserveMyRides(field: String, uid: String): Flow<List<Ride>> = callbackFlow {
         val reg = db.collection("chalo_rides").whereEqualTo(field, uid)
             .addSnapshotListener { snap, err ->
                 if (err != null || snap == null) return@addSnapshotListener
@@ -173,7 +263,7 @@ object Repo {
         awaitClose { reg.remove() }
     }
 
-    fun observeRequested(vehicleKey: String): Flow<List<Ride>> = callbackFlow {
+    private fun fsObserveRequested(vehicleKey: String): Flow<List<Ride>> = callbackFlow {
         val reg = db.collection("chalo_rides")
             .whereEqualTo("status", RideStatus.REQUESTED)
             .whereEqualTo("vehicleType", vehicleKey)
@@ -184,7 +274,7 @@ object Repo {
         awaitClose { reg.remove() }
     }
 
-    fun observeContact(rideId: String, who: String): Flow<Contact?> = callbackFlow {
+    private fun fsObserveContact(rideId: String, who: String): Flow<Contact?> = callbackFlow {
         val reg = db.collection("chalo_rides").document(rideId)
             .collection("contacts").document(who)
             .addSnapshotListener { s, err ->
@@ -198,7 +288,7 @@ object Repo {
         awaitClose { reg.remove() }
     }
 
-    fun observeDriverLoc(driverId: String): Flow<Pt?> = callbackFlow {
+    private fun fsObserveDriverLoc(driverId: String): Flow<Pt?> = callbackFlow {
         val reg = db.collection("chalo_drivers").document(driverId)
             .addSnapshotListener { s, err ->
                 if (err != null) return@addSnapshotListener
@@ -209,7 +299,7 @@ object Repo {
         awaitClose { reg.remove() }
     }
 
-    suspend fun setDriverOffline(uid: String) {
+    private suspend fun fsSetDriverOffline(uid: String) {
         db.collection("chalo_drivers").document(uid)
             .set(
                 mapOf("online" to false, "updatedAt" to FieldValue.serverTimestamp()),

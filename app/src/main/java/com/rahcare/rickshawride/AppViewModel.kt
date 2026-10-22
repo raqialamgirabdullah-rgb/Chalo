@@ -373,6 +373,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** শুধু পরীক্ষার মোডে: কাছাকাছি একটি নকল যাত্রীর রিকোয়েস্ট আনে। */
+    fun addDemoRequest() {
+        val loc = LocationHub.location.value
+        val v = profile?.vehicleType
+        if (loc == null || v == null) {
+            message = "আপনার অবস্থান পেতে একটু অপেক্ষা করুন, তারপর আবার চাপুন।"
+            return
+        }
+        Repo.createDemoRequest(loc, v)
+    }
+
     fun rejectRequest(r: Ride) {
         hidden.value = hidden.value + r.id
     }

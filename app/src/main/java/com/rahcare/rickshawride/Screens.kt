@@ -216,6 +216,15 @@ fun MainFrame(vm: AppViewModel, driver: Boolean) {
                 Text("ভূমিকা বদলান", fontSize = 16.sp)
             }
         }
+        if (AppConfig.LOCAL_MODE) {
+            Text(
+                "পরীক্ষামূলক মোড: তথ্য শুধু এই ফোনে থাকছে, অন্য ফোনের সাথে মিলবে না।",
+                fontSize = 14.sp,
+                color = Color(0xFF5D4000),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().background(Color(0xFFFFE9B3)).padding(6.dp),
+            )
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (tab == 0) {
                 if (driver) DriverHome(vm) else PassengerHome(vm)
@@ -543,6 +552,9 @@ fun DriverIdle(vm: AppViewModel) {
                 } else if (requests.isEmpty()) {
                     Title("নতুন রিকোয়েস্টের অপেক্ষা...")
                     Body("৩ কিমির মধ্যে আপনার গাড়ির ধরনের রিকোয়েস্ট এলে এখানে দেখা যাবে।")
+                    if (AppConfig.LOCAL_MODE) {
+                        BigButton("ডেমো রিকোয়েস্ট আনুন (পরীক্ষা)", { vm.addDemoRequest() }, secondary = true)
+                    }
                 } else {
                     Title("নতুন রিকোয়েস্ট (${requests.size.bn()}টি)")
                     for (r in requests) RequestCard(vm, r, me)

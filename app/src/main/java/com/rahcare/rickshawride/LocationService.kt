@@ -22,10 +22,6 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** চালকের অনলাইন অবস্থা ও সর্বশেষ অবস্থান, অ্যাপের সব জায়গা থেকে দেখা যায়। */
@@ -67,7 +63,7 @@ class LocationService : Service() {
             PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
-        if (!hasPerm || FirebaseAuth.getInstance().currentUser == null) {
+        if (!hasPerm || Repo.currentUid() == null) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -106,30 +102,16 @@ class LocationService : Service() {
         lastWritten = pt
         lastWriteAt = now
 
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val data = hashMapOf<String, Any>(
-            "online" to true,
-            "lat" to pt.lat,
-            "lng" to pt.lng,
-            "vehicleType" to vehicle,
-            "updatedAt" to FieldValue.serverTimestamp(),
-        )
-        FirebaseFirestore.getInstance().collection("chalo_drivers").document(uid)
-            .set(data, SetOptions.merge())
+        val uid = Repo.currentUid() ?: return
+        Repo.writeDriverLocation(uid, pt, vehicle)
     }
 
     override fun onDestroy() {
         callback?.let { client.removeLocationUpdates(it) }
         callback = null
         LocationHub.running.value = false
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid != null) {
-            FirebaseFirestore.getInstance().collection("chalo_drivers").document(uid)
-                .set(
-                    mapOf("online" to false, "updatedAt" to FieldValue.serverTimestamp()),
-                    SetOptions.merge(),
-                )
-        }
+        val uid = Repo.currentUid()
+        if (uid != null) Repo.writeDriverOfflineQuiet(uid)
         super.onDestroy()
     }
 

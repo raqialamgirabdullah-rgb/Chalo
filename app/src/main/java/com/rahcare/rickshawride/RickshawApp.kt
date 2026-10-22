@@ -23,7 +23,9 @@ class RickshawApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        if (FirebaseApp.getApps(this).isEmpty()) {
+        if (AppConfig.LOCAL_MODE) {
+            LocalStore.init(this)
+        } else if (FirebaseApp.getApps(this).isEmpty()) {
             val options = FirebaseOptions.Builder()
                 .setApiKey(FirebaseConfig.API_KEY)
                 .setApplicationId(FirebaseConfig.APP_ID)
