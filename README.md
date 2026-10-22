@@ -18,29 +18,26 @@
 | `LocationService.kt` | চালকের ফোরগ্রাউন্ড সার্ভিস, লাইভ অবস্থান পাঠায় |
 | `AppViewModel.kt` | অ্যাপের যুক্তি |
 | `Screens.kt`, `Ui.kt`, `OsmMap.kt` | সব পর্দা (বাংলা), মানচিত্র |
-| `firestore.rules` | Firestore নিরাপত্তা নিয়ম |
+| `firestore.rules` | Firestore নিরাপত্তা নিয়ম (ওয়েবসাইটের Rules-এর ভেতরে যোগ করার অংশ) |
 | `.github/workflows/build.yml` | স্বয়ংক্রিয় APK বিল্ড ও Releases-এ প্রকাশ |
+
+## Firebase: RahCare ওয়েবসাইটের একই প্রজেক্ট (`rah-care`)
+
+অ্যাপ ওয়েবসাইটের Firebase প্রজেক্টই ব্যবহার করে (`RickshawApp.kt`-এর `FirebaseConfig`)। তাই `google-services.json` লাগে না। অন্য প্রজেক্টে সরাতে চাইলে ঐ পাঁচটি মান বদলালেই হয়।
+
+- অ্যাপের সব collection-এর নামের শুরুতে `chalo_` আছে (`chalo_users`, `chalo_drivers`, `chalo_rides`), যেন ওয়েবসাইটের `users`, `appointments` ইত্যাদির সাথে না মেশে।
+- ⚠ ওয়েবসাইটের সব Rules মুছে নতুন Rules বসাবেন না। `firestore.rules` একটি **যোগ করার অংশ**, বর্তমান Rules-এর ভেতরে বসাতে হয়।
+- ⚠ Anonymous Auth চালু করলে অ্যাপের যেকোনো ব্যবহারকারী "সাইন-ইন করা" ধরা পড়ে। ওয়েবসাইটের বর্তমান Rules যদি `request.auth != null` দিয়ে রোগীর তথ্য খুলে রাখে, তাহলে অ্যাপের ব্যবহারকারীরাও তা দেখতে পাবে। তাই Rules আগে মিলিয়ে নিতে হবে। নিরাপদ পথ হলো আলাদা Firebase প্রজেক্ট।
 
 ## আপনার করণীয় (ফোন থেকে)
 
-### ক) Firebase প্রজেক্ট
-1. `console.firebase.google.com` → Google অ্যাকাউন্টে ঢুকুন → **Create a project** → নাম `rahcare-rickshawride` → Google Analytics বন্ধ → Create।
-2. **Build → Authentication → Get started → Sign-in method → Anonymous → Enable → Save**।
-3. **Build → Firestore Database → Create database → Production mode** → লোকেশন `asia-south1` → Enable।
-4. প্রজেক্টের হোমে **Android আইকন** → প্যাকেজ নাম হুবহু `com.rahcare.rickshawride` → Register app → **`google-services.json` ডাউনলোড**। বাকি ধাপ বাদ দিন।
-5. ফাইলটির সব লেখা কপি করে Claude-কে পাঠান। Claude সেটি `app/google-services.json` হিসেবে রাখবে। এটি না থাকলে বিল্ড চলে না।
-
-### খ) Security Rules
-- Firestore Database → **Rules** ট্যাব → সব লেখা মুছে এই রিপোজিটরির `firestore.rules` ফাইলের পুরো লেখা পেস্ট → **Publish**।
-
-### গ) সাইন করার চাবি (একবারের কাজ)
-GitHub-এ রিপোজিটরি `Chalo` → **Settings → Secrets and variables → Actions → New repository secret**। চারটি secret বানান (নাম হুবহু বড় হাতের):
-`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`।
-মানগুলো Claude আপনাকে আলাদা ফাইলে দিয়েছে। **ঐ চাবির ফাইলের ব্যাকআপ নিরাপদ জায়গায় রাখুন।** হারালে পুরোনো অ্যাপের ওপর নতুন সংস্করণ ইনস্টল হবে না।
-
-### ঘ) APK নামানো
-- রিপোজিটরি → **Releases** → সর্বশেষ সংস্করণ → `RickshawRide.apk` চাপুন। ফোনে "অজানা উৎস থেকে ইনস্টল" অনুমতি দিতে হতে পারে।
-- বিল্ড ফেল করলে `build-logs` ব্রাঞ্চের `build-error.txt` ফাইলটি Claude-কে দেখান।
+1. Firebase Console → প্রজেক্ট `rah-care` → **Authentication → Sign-in method → Anonymous → Enable**। (Firestore আগে থেকেই আছে।)
+2. Firestore → **Rules** ট্যাবের বর্তমান লেখা সব কপি করে Claude-কে পাঠান। Claude ওয়েবসাইটের নিয়ম অক্ষত রেখে চলোর অংশ মিলিয়ে দেবে। তারপর মিলানো লেখা পেস্ট করে **Publish**।
+3. GitHub → `Chalo` → **Settings → Secrets and variables → Actions** → চারটি secret: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` (মান Claude-এর দেওয়া ফাইলে)। **চাবির ফাইলের ব্যাকআপ রাখুন**, হারালে পুরোনো অ্যাপের ওপর নতুন সংস্করণ ইনস্টল হবে না।
+4. Actions ট্যাব → **Build APK → Run workflow** চাপুন।
+5. রিপোজিটরি → **Releases** → `RickshawRide.apk` নামান। ফোনে "অজানা উৎস থেকে ইনস্টল" অনুমতি দিতে হতে পারে।
+6. বিল্ড ফেল করলে `build-logs` ব্রাঞ্চের `build-error.txt` Claude-কে দেখান।
+7. অ্যাপ খুলে সংযোগ-ত্রুটি এলে: ওয়েবসাইটের API key সম্ভবত শুধু ব্রাউজারের জন্য সীমাবদ্ধ। তখন Console → Project settings → Your apps → **Add app → Android** (প্যাকেজ `com.rahcare.rickshawride`) করে `google-services.json` পাঠান, Claude সেটি দিয়ে বদলে দেবে।
 
 ## দুটি ফোনে পরীক্ষার তালিকা (ফোন ক = যাত্রী, ফোন খ = চালক)
 

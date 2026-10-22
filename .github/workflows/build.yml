@@ -18,15 +18,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # google-services.json না থাকলে বিল্ড চলবে না (ব্যর্থও হবে না, শুধু বাদ যাবে)।
-      - name: google-services.json আছে কি না দেখা
+      # সাইন করার secret (KEYSTORE_BASE64) বসানো না থাকলে বিল্ড বাদ যায় (ব্যর্থ হয় না)।
+      - name: সাইন করার secret আছে কি না দেখা
         id: chk
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          if [ -f app/google-services.json ]; then
+          if [ -n "$KEYSTORE_BASE64" ]; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
             echo "ok=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::app/google-services.json পাওয়া যায়নি, তাই বিল্ড চালানো হয়নি।"
+            echo "::warning::KEYSTORE_BASE64 secret সেট করা নেই, তাই বিল্ড চালানো হয়নি। Secrets বসিয়ে Actions থেকে Run workflow চাপুন।"
           fi
 
       - name: Java 17

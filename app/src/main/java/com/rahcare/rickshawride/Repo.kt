@@ -26,7 +26,7 @@ object Repo {
 
     // ---------- প্রোফাইল ----------
     suspend fun loadProfile(uid: String): Profile? {
-        val s = db.collection("users").document(uid).get().await()
+        val s = db.collection("chalo_users").document(uid).get().await()
         if (!s.exists()) return null
         return Profile(
             name = s.getString("name") ?: "",
@@ -44,7 +44,7 @@ object Repo {
             "updatedAt" to FieldValue.serverTimestamp(),
         )
         if (p.role == "driver") data["vehicleType"] = p.vehicleType
-        db.collection("users").document(uid).set(data, SetOptions.merge()).await()
+        db.collection("chalo_users").document(uid).set(data, SetOptions.merge()).await()
     }
 
     // ---------- রাইড ডাকা ----------
@@ -57,7 +57,7 @@ object Repo {
         km: Double,
         fare: Int,
     ): String {
-        val ref = db.collection("rides").document()
+        val ref = db.collection("chalo_rides").document()
         val ride = hashMapOf<String, Any?>(
             "status" to RideStatus.REQUESTED,
             "passengerId" to uid,
@@ -88,7 +88,7 @@ object Repo {
      * তাই একসাথে কয়েকজন চাপলেও শুধু একজন পায়। সফল হলে true।
      */
     suspend fun acceptRide(rideId: String, uid: String, p: Profile): Boolean {
-        val ref = db.collection("rides").document(rideId)
+        val ref = db.collection("chalo_rides").document(rideId)
         val driverContact = ref.collection("contacts").document("driver")
         return try {
             db.runTransaction(Transaction.Function<Void?> { tx ->
@@ -126,7 +126,7 @@ object Repo {
             RideStatus.COMPLETED -> "completedAt"
             else -> throw IllegalArgumentException("অজানা অবস্থা: $status")
         }
-        db.collection("rides").document(rideId)
+        db.collection("chalo_rides").document(rideId)
             .update(mapOf("status" to status, field to FieldValue.serverTimestamp()))
             .await()
     }
@@ -136,7 +136,7 @@ object Repo {
      * (৩ মিনিটের স্বয়ংক্রিয় বাতিলে এটা দরকার)।
      */
     suspend fun cancelRide(rideId: String, by: String, onlyIfRequested: Boolean = false): Boolean {
-        val ref = db.collection("rides").document(rideId)
+        val ref = db.collection("chalo_rides").document(rideId)
         return try {
             val done = db.runTransaction(Transaction.Function<Boolean> { tx ->
                 val status = tx.get(ref).getString("status")
@@ -165,7 +165,7 @@ object Repo {
 
     // ---------- লাইভ শোনা ----------
     fun observeMyRides(field: String, uid: String): Flow<List<Ride>> = callbackFlow {
-        val reg = db.collection("rides").whereEqualTo(field, uid)
+        val reg = db.collection("chalo_rides").whereEqualTo(field, uid)
             .addSnapshotListener { snap, err ->
                 if (err != null || snap == null) return@addSnapshotListener
                 trySend(snap.documents.mapNotNull { it.toRide() })
@@ -174,7 +174,7 @@ object Repo {
     }
 
     fun observeRequested(vehicleKey: String): Flow<List<Ride>> = callbackFlow {
-        val reg = db.collection("rides")
+        val reg = db.collection("chalo_rides")
             .whereEqualTo("status", RideStatus.REQUESTED)
             .whereEqualTo("vehicleType", vehicleKey)
             .addSnapshotListener { snap, err ->
@@ -185,7 +185,7 @@ object Repo {
     }
 
     fun observeContact(rideId: String, who: String): Flow<Contact?> = callbackFlow {
-        val reg = db.collection("rides").document(rideId)
+        val reg = db.collection("chalo_rides").document(rideId)
             .collection("contacts").document(who)
             .addSnapshotListener { s, err ->
                 if (err != null) return@addSnapshotListener
@@ -199,7 +199,7 @@ object Repo {
     }
 
     fun observeDriverLoc(driverId: String): Flow<Pt?> = callbackFlow {
-        val reg = db.collection("drivers").document(driverId)
+        val reg = db.collection("chalo_drivers").document(driverId)
             .addSnapshotListener { s, err ->
                 if (err != null) return@addSnapshotListener
                 val lat = s?.getDouble("lat")
@@ -210,7 +210,7 @@ object Repo {
     }
 
     suspend fun setDriverOffline(uid: String) {
-        db.collection("drivers").document(uid)
+        db.collection("chalo_drivers").document(uid)
             .set(
                 mapOf("online" to false, "updatedAt" to FieldValue.serverTimestamp()),
                 SetOptions.merge(),

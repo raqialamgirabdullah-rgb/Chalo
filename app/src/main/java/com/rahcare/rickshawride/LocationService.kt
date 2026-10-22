@@ -114,7 +114,7 @@ class LocationService : Service() {
             "vehicleType" to vehicle,
             "updatedAt" to FieldValue.serverTimestamp(),
         )
-        FirebaseFirestore.getInstance().collection("drivers").document(uid)
+        FirebaseFirestore.getInstance().collection("chalo_drivers").document(uid)
             .set(data, SetOptions.merge())
     }
 
@@ -124,7 +124,7 @@ class LocationService : Service() {
         LocationHub.running.value = false
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid != null) {
-            FirebaseFirestore.getInstance().collection("drivers").document(uid)
+            FirebaseFirestore.getInstance().collection("chalo_drivers").document(uid)
                 .set(
                     mapOf("online" to false, "updatedAt" to FieldValue.serverTimestamp()),
                     SetOptions.merge(),
